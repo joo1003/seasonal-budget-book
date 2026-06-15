@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>가계부</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <style>
     :root {
       --bg: #fdf6f0; --header-from: #f9a8d4; --header-to: #fbcfe8;
@@ -68,6 +69,7 @@
     .type-toggle button.active-expense { background:var(--expense-color); color:white; }
     .btn-add { width:100%; padding:11px; background:linear-gradient(135deg,var(--header-from),var(--accent)); color:white; border:none; border-radius:10px; font-size:.95rem; font-weight:700; cursor:pointer; margin-top:4px; transition:opacity .2s; }
     .btn-add:hover { opacity:.88; }
+    .btn-add:disabled { opacity:.5; cursor:not-allowed; }
 
     /* ── LIST ── */
     .list-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; }
@@ -89,6 +91,7 @@
     .tx-del { background:none; border:none; color:var(--card-border); cursor:pointer; font-size:.85rem; padding:4px; transition:color .15s; }
     .tx-del:hover { color:#ef4444; }
     .empty { text-align:center; padding:36px; color:var(--subtext); font-size:.88rem; }
+    .loading { text-align:center; padding:24px; color:var(--subtext); font-size:.88rem; }
 
     /* ── MUSIC BUTTON ── */
     #music-btn {
@@ -194,7 +197,7 @@
     <div class="form-row full">
       <input type="number" id="input-amount" placeholder="금액 (원)" min="0">
     </div>
-    <button class="btn-add" onclick="addTransaction()">추가하기</button>
+    <button class="btn-add" id="btn-add" onclick="addTransaction()">추가하기</button>
   </div>
 
   <!-- 내역 -->
@@ -207,7 +210,7 @@
         <button onclick="setFilter('expense',this)">지출</button>
       </div>
     </div>
-    <div id="tx-list"></div>
+    <div id="tx-list"><div class="loading">불러오는 중...</div></div>
   </div>
 </div>
 
@@ -221,6 +224,13 @@
 </div>
 
 <script>
+/* ═══════════════════════════════════════════
+   SUPABASE
+═══════════════════════════════════════════ */
+const SUPABASE_URL = 'https://ldpxpyoovhdmptjlkhtf.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxkcHhweW9vdmhkbXB0amxraHRmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE0ODAzMDAsImV4cCI6MjA5NzA1NjMwMH0.9MvQOnHnLFE45zKlUK09I5KcRa4kyOlNHqdIAK0ia4Q';
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
 /* ═══════════════════════════════════════════
    SEASONAL THEME
 ═══════════════════════════════════════════ */
@@ -245,32 +255,76 @@ function applyTheme(m){
 }
 
 /* ═══════════════════════════════════════════
-   DATA
+   STATE
 ═══════════════════════════════════════════ */
 let currentType='income', currentFilter='all', viewYear, viewMonth;
-
-function txKey(){ return `gjm_tx_${viewYear}_${viewMonth}`; }
-function budgetKey(){ return `gjm_budget_${viewYear}_${viewMonth}`; }
-function loadTx(){ return JSON.parse(localStorage.getItem(txKey())||'[]'); }
-function loadBudget(){ return parseInt(localStorage.getItem(budgetKey()))||0; }
-function saveTx(d){ localStorage.setItem(txKey(),JSON.stringify(d)); }
+let cachedTx=[], cachedBudget=0;
 
 function initMonth(){
   const now=new Date();
   viewYear=now.getFullYear(); viewMonth=now.getMonth()+1;
   document.getElementById('input-date').value=now.toISOString().slice(0,10);
 }
-function changeMonth(d){ viewMonth+=d; if(viewMonth>12){viewMonth=1;viewYear++;} if(viewMonth<1){viewMonth=12;viewYear--;} render(); }
-function setType(t){ currentType=t; document.getElementById('btn-income').className=t==='income'?'active-income':''; document.getElementById('btn-expense').className=t==='expense'?'active-expense':''; }
-function setFilter(f,btn){ currentFilter=f; document.querySelectorAll('.filter-tabs button').forEach(b=>b.classList.remove('active')); btn.classList.add('active'); renderList(); }
 
-function saveBudget(){
-  const v=parseInt(document.getElementById('budget-input').value);
-  if(!v||v<=0){alert('올바른 예산을 입력하세요.');return;}
-  localStorage.setItem(budgetKey(),v); render();
+function changeMonth(d){
+  viewMonth+=d;
+  if(viewMonth>12){viewMonth=1;viewYear++;}
+  if(viewMonth<1){viewMonth=12;viewYear--;}
+  render();
 }
 
-function addTransaction(){
+function setType(t){
+  currentType=t;
+  document.getElementById('btn-income').className=t==='income'?'active-income':'';
+  document.getElementById('btn-expense').className=t==='expense'?'active-expense':'';
+}
+
+function setFilter(f,btn){
+  currentFilter=f;
+  document.querySelectorAll('.filter-tabs button').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  renderList();
+}
+
+/* ═══════════════════════════════════════════
+   SUPABASE DATA LAYER
+═══════════════════════════════════════════ */
+async function fetchTx(){
+  const { data, error } = await sb
+    .from('transactions')
+    .select('*')
+    .eq('year', viewYear)
+    .eq('month', viewMonth)
+    .order('date', { ascending: false })
+    .order('created_at', { ascending: false });
+  if(error){ console.error('거래 불러오기 실패:', error); return []; }
+  return data || [];
+}
+
+async function fetchBudget(){
+  const { data, error } = await sb
+    .from('budgets')
+    .select('amount')
+    .eq('year', viewYear)
+    .eq('month', viewMonth)
+    .maybeSingle();
+  if(error){ console.error('예산 불러오기 실패:', error); return 0; }
+  return data?.amount || 0;
+}
+
+async function saveBudget(){
+  const v=parseInt(document.getElementById('budget-input').value);
+  if(!v||v<=0){alert('올바른 예산을 입력하세요.');return;}
+  const { error } = await sb
+    .from('budgets')
+    .upsert({ year:viewYear, month:viewMonth, amount:v }, { onConflict:'year,month' });
+  if(error){ alert('예산 저장 실패: '+error.message); return; }
+  cachedBudget=v;
+  renderBudget();
+  updateMusicState();
+}
+
+async function addTransaction(){
   const desc=document.getElementById('input-desc').value.trim();
   const amount=parseInt(document.getElementById('input-amount').value);
   const date=document.getElementById('input-date').value;
@@ -278,28 +332,45 @@ function addTransaction(){
   if(!desc){alert('내용을 입력하세요.');return;}
   if(!amount||amount<=0){alert('금액을 입력하세요.');return;}
   if(!date){alert('날짜를 선택하세요.');return;}
-  const data=loadTx();
-  data.push({id:Date.now(),type:currentType,desc,amount,date,category:cat});
-  data.sort((a,b)=>b.date.localeCompare(a.date));
-  saveTx(data);
+
+  const btn=document.getElementById('btn-add');
+  btn.disabled=true; btn.textContent='저장 중...';
+
+  const year=parseInt(date.split('-')[0]), month=parseInt(date.split('-')[1]);
+  const { error } = await sb.from('transactions').insert({
+    type: currentType,
+    description: desc,
+    amount,
+    date,
+    category: cat,
+    year,
+    month,
+  });
+
+  btn.disabled=false; btn.textContent='추가하기';
+  if(error){ alert('추가 실패: '+error.message); return; }
+
   document.getElementById('input-desc').value='';
   document.getElementById('input-amount').value='';
   document.getElementById('input-category').value='';
-  render();
+  await render();
 }
 
-function deleteTransaction(id){ saveTx(loadTx().filter(t=>t.id!==id)); render(); }
-
-function fmt(n){ return '₩'+n.toLocaleString('ko-KR'); }
-function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+async function deleteTransaction(id){
+  const { error } = await sb.from('transactions').delete().eq('id', id);
+  if(error){ alert('삭제 실패: '+error.message); return; }
+  await render();
+}
 
 /* ═══════════════════════════════════════════
    RENDER
 ═══════════════════════════════════════════ */
+function fmt(n){ return '₩'+n.toLocaleString('ko-KR'); }
+function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
 function renderSummary(){
-  const data=loadTx();
-  const inc=data.filter(t=>t.type==='income').reduce((s,t)=>s+t.amount,0);
-  const exp=data.filter(t=>t.type==='expense').reduce((s,t)=>s+t.amount,0);
+  const inc=cachedTx.filter(t=>t.type==='income').reduce((s,t)=>s+t.amount,0);
+  const exp=cachedTx.filter(t=>t.type==='expense').reduce((s,t)=>s+t.amount,0);
   const bal=inc-exp;
   document.getElementById('total-income').textContent=fmt(inc);
   document.getElementById('total-expense').textContent=fmt(exp);
@@ -309,9 +380,8 @@ function renderSummary(){
 }
 
 function renderBudget(){
-  const data=loadTx();
-  const exp=data.filter(t=>t.type==='expense').reduce((s,t)=>s+t.amount,0);
-  const budget=loadBudget();
+  const exp=cachedTx.filter(t=>t.type==='expense').reduce((s,t)=>s+t.amount,0);
+  const budget=cachedBudget;
   document.getElementById('budget-input').value=budget||'';
   document.getElementById('budget-spent-label').textContent='지출 '+fmt(exp);
   const bar=document.getElementById('budget-bar');
@@ -326,26 +396,33 @@ function renderBudget(){
 }
 
 function renderList(){
-  const data=loadTx();
-  const filtered=currentFilter==='all'?data:data.filter(t=>t.type===currentFilter);
+  const data=currentFilter==='all'?cachedTx:cachedTx.filter(t=>t.type===currentFilter);
   const list=document.getElementById('tx-list');
-  if(!filtered.length){ list.innerHTML='<div class="empty">내역이 없습니다.</div>'; return; }
+  if(!data.length){ list.innerHTML='<div class="empty">내역이 없습니다.</div>'; return; }
   const groups={};
-  filtered.forEach(t=>{ if(!groups[t.date])groups[t.date]=[]; groups[t.date].push(t); });
+  data.forEach(t=>{ if(!groups[t.date])groups[t.date]=[]; groups[t.date].push(t); });
   const DOW=['일','월','화','수','목','금','토'];
   list.innerHTML=Object.entries(groups).sort((a,b)=>b[0].localeCompare(a[0])).map(([date,items])=>{
     const [,m,d]=date.split('-');
     const dow=DOW[new Date(date).getDay()];
     const dayTotal=items.reduce((s,t)=>s+(t.type==='expense'?-t.amount:t.amount),0);
     return `<div class="date-group-label">${parseInt(m)}월 ${parseInt(d)}일 (${dow})<span style="float:right;font-weight:700;color:${dayTotal>=0?'var(--income-color)':'var(--expense-color)'}">${dayTotal>=0?'+':''}${fmt(dayTotal)}</span></div>
-    ${items.map(t=>`<div class="tx-item"><div class="tx-icon ${t.type}">${CAT_ICON[t.category]||'📋'}</div><div class="tx-info"><div class="tx-desc">${esc(t.desc)}</div><div class="tx-meta">${t.category?esc(t.category):'미분류'}</div></div><div class="tx-amount ${t.type}">${t.type==='income'?'+':'-'}${fmt(t.amount)}</div><button class="tx-del" onclick="deleteTransaction(${t.id})">✕</button></div>`).join('')}`;
+    ${items.map(t=>`<div class="tx-item"><div class="tx-icon ${t.type}">${CAT_ICON[t.category]||'📋'}</div><div class="tx-info"><div class="tx-desc">${esc(t.description)}</div><div class="tx-meta">${t.category?esc(t.category):'미분류'}</div></div><div class="tx-amount ${t.type}">${t.type==='income'?'+':'-'}${fmt(t.amount)}</div><button class="tx-del" onclick="deleteTransaction(${t.id})">✕</button></div>`).join('')}`;
   }).join('');
 }
 
-function render(){
+async function render(){
   applyTheme(viewMonth);
   document.getElementById('current-month').textContent=`${viewYear}년 ${viewMonth}월`;
-  renderSummary(); renderBudget(); renderList();
+  document.getElementById('tx-list').innerHTML='<div class="loading">불러오는 중...</div>';
+
+  const [tx, budget] = await Promise.all([fetchTx(), fetchBudget()]);
+  cachedTx = tx;
+  cachedBudget = budget;
+
+  renderSummary();
+  renderBudget();
+  renderList();
   updateMusicState();
 }
 
@@ -354,11 +431,10 @@ function render(){
 ═══════════════════════════════════════════ */
 const M2F = m => 440 * Math.pow(2, (m-69)/12);
 
-// Scale definitions (MIDI → Hz)
 const SCALE = {
-  calm:   [57,60,62,64,67,69,72].map(M2F),   // A minor pentatonic
-  horror: [60,63,66,69].map(M2F),              // diminished 7th
-  happy:  [60,64,67,69,72,76].map(M2F),        // C major pentatonic
+  calm:   [57,60,62,64,67,69,72].map(M2F),
+  horror: [60,63,66,69].map(M2F),
+  happy:  [60,64,67,69,72,76].map(M2F),
 };
 
 class MusicEngine {
@@ -372,12 +448,9 @@ class MusicEngine {
   init(){
     if(this.ctx) return;
     this.ctx = new (window.AudioContext||window.webkitAudioContext)();
-
     this.master = this.ctx.createGain();
     this.master.gain.value = 0;
     this.master.connect(this.ctx.destination);
-
-    // Reverb (synthesized impulse response)
     const conv = this.ctx.createConvolver();
     const len  = this.ctx.sampleRate * 2.2;
     const buf  = this.ctx.createBuffer(2, len, this.ctx.sampleRate);
@@ -386,12 +459,10 @@ class MusicEngine {
       for(let i=0;i<len;i++) d[i]=(Math.random()*2-1)*Math.pow(1-i/len,2.4);
     }
     conv.buffer=buf;
-
     this.dry=this.ctx.createGain(); this.dry.gain.value=0.72; this.dry.connect(this.master);
     this.wet=this.ctx.createGain(); this.wet.gain.value=0.28; this.wet.connect(conv); conv.connect(this.master);
   }
 
-  // Schedule one note
   note(freq, t, dur, wave, vol, bus='dry'){
     const ctx=this.ctx;
     const osc=ctx.createOscillator();
@@ -406,7 +477,6 @@ class MusicEngine {
     osc.start(t); osc.stop(t+dur+0.05);
   }
 
-  // Noise burst (for horror)
   noise(t, dur, cutoff){
     const ctx=this.ctx;
     const len=Math.ceil(ctx.sampleRate*dur);
@@ -422,7 +492,6 @@ class MusicEngine {
     src.start(t); src.stop(t+dur+0.01);
   }
 
-  // Start a continuous drone with fade-in, returns cleanup fn
   drone(midi, wave, vol, tremolo=false){
     const ctx=this.ctx, now=ctx.currentTime;
     const osc=ctx.createOscillator();
@@ -434,7 +503,6 @@ class MusicEngine {
     fadeG.gain.linearRampToValueAtTime(1,now+2.5);
     osc.connect(baseG); baseG.connect(fadeG); fadeG.connect(this.dry);
     osc.start();
-
     let lfo=null;
     if(tremolo){
       lfo=ctx.createOscillator();
@@ -444,7 +512,6 @@ class MusicEngine {
       lfo.connect(lg); lg.connect(baseG.gain);
       lfo.start();
     }
-
     this.cleanups.push(stopAt=>{
       fadeG.gain.cancelScheduledValues(stopAt-0.6);
       fadeG.gain.setValueAtTime(fadeG.gain.value,stopAt-0.6);
@@ -462,13 +529,13 @@ class MusicEngine {
 
   setupDrones(){
     if(this.state==='calm'){
-      this.drone(45,'sine',0.055);  // A2
-      this.drone(52,'sine',0.035);  // E3
+      this.drone(45,'sine',0.055);
+      this.drone(52,'sine',0.035);
     } else if(this.state==='horror'){
-      this.drone(36,'sawtooth',0.10,true);  // C2, tremolo
-      this.drone(42,'sawtooth',0.07,true);  // F#2, tremolo
+      this.drone(36,'sawtooth',0.10,true);
+      this.drone(42,'sawtooth',0.07,true);
     } else {
-      this.drone(48,'sine',0.038);  // C3 (happy)
+      this.drone(48,'sine',0.038);
     }
   }
 
@@ -481,7 +548,6 @@ class MusicEngine {
       }
       if(this.beat%8===0)
         this.note(M2F(45), t, 0.9, 'sine', 0.18, 'dry');
-
     } else if(this.state==='horror'){
       if(Math.random()<0.17){
         const note=SCALE.horror[Math.floor(Math.random()*SCALE.horror.length)];
@@ -491,37 +557,25 @@ class MusicEngine {
         this.note(M2F(36), t, 1.4, 'sawtooth', 0.20, 'dry');
         this.noise(t, 0.7, 90);
       }
-      // Occasional high screech
-      if(Math.random()<0.04){
+      if(Math.random()<0.04)
         this.note(M2F(84+Math.floor(Math.random()*7)), t, 0.08, 'sawtooth', 0.07, 'wet');
-      }
-      // Random low thud
-      if(Math.random()<0.06){
+      if(Math.random()<0.06)
         this.note(M2F(30+Math.floor(Math.random()*4)), t, 0.3, 'sawtooth', 0.18, 'dry');
-      }
-
-    } else { // happy
+    } else {
       const PATTERN=[1,0,1,1,0,1,0,1];
       if(PATTERN[this.beat%8]){
         const note=SCALE.happy[Math.floor(Math.random()*SCALE.happy.length)];
         this.note(note, t, 0.17, 'triangle', 0.36, 'dry');
       }
-      // Bass
-      if(this.beat%8===0){
-        this.note(M2F(48), t, 0.38, 'triangle', 0.28, 'dry');  // C3
-      } else if(this.beat%8===4){
-        this.note(M2F(55), t, 0.38, 'triangle', 0.22, 'dry');  // G3
-      }
-      // Chord splash every 16 beats
-      if(this.beat%16===0){
-        [60,64,67].forEach(n=> this.note(M2F(n), t, 0.5, 'sine', 0.1, 'wet'));
-      }
+      if(this.beat%8===0) this.note(M2F(48), t, 0.38, 'triangle', 0.28, 'dry');
+      else if(this.beat%8===4) this.note(M2F(55), t, 0.38, 'triangle', 0.22, 'dry');
+      if(this.beat%16===0) [60,64,67].forEach(n=>this.note(M2F(n), t, 0.5, 'sine', 0.1, 'wet'));
     }
   }
 
   advance(){
     const bpm = this.state==='happy'?112 : this.state==='horror'?48 : 60;
-    this.nextTime += (60/bpm)/2;  // 8th notes
+    this.nextTime += (60/bpm)/2;
     this.beat++;
   }
 
@@ -540,7 +594,6 @@ class MusicEngine {
     this.flushCleanups();
     this.beat=0;
     setTimeout(()=>this.setupDrones(), 650);
-    // Adjust master volume per state
     const vol = newState==='horror'?0.3 : 0.22;
     if(!this.muted){
       this.master.gain.cancelScheduledValues(this.ctx.currentTime);
@@ -592,12 +645,10 @@ const STATE_META = {
 };
 
 function getMusicState(){
-  const data=loadTx();
-  const income=data.filter(t=>t.type==='income').reduce((s,t)=>s+t.amount,0);
-  const expense=data.filter(t=>t.type==='expense').reduce((s,t)=>s+t.amount,0);
-  const budget=loadBudget();
-  if(budget>0 && expense>=budget) return 'horror';
-  if(income>0 && income>expense)  return 'happy';
+  const inc=cachedTx.filter(t=>t.type==='income').reduce((s,t)=>s+t.amount,0);
+  const exp=cachedTx.filter(t=>t.type==='expense').reduce((s,t)=>s+t.amount,0);
+  if(cachedBudget>0 && exp>=cachedBudget) return 'horror';
+  if(inc>0 && inc>exp) return 'happy';
   return 'calm';
 }
 

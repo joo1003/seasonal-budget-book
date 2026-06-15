@@ -1,0 +1,636 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>가계부</title>
+  <style>
+    :root {
+      --bg: #fdf6f0; --header-from: #f9a8d4; --header-to: #fbcfe8;
+      --header-text: #831843; --accent: #ec4899; --accent2: #f472b6;
+      --card-border: #fce7f3; --badge-income: #fdf2f8; --badge-expense: #fff1f2;
+      --income-color: #be185d; --expense-color: #9f1239; --balance-color: #059669;
+      --text: #3b1a2e; --subtext: #9d7a8a;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Segoe UI','Apple SD Gothic Neo',sans-serif; background:var(--bg); color:var(--text); min-height:100vh; transition:background 0.7s,color 0.4s; }
+
+    /* ── HEADER ── */
+    header { background:linear-gradient(135deg,var(--header-from),var(--header-to)); padding:22px 24px 60px; position:relative; overflow:hidden; }
+    .hd { position:absolute; font-size:5.5rem; opacity:.11; pointer-events:none; user-select:none; }
+    .hd1 { top:-14px; right:8px; transform:rotate(12deg); }
+    .hd2 { bottom:-22px; left:16px; font-size:3.8rem; transform:rotate(-8deg); }
+    .hd3 { top:8px; left:46%; font-size:3rem; opacity:.07; }
+    .header-top { display:flex; justify-content:space-between; align-items:center; position:relative; z-index:1; }
+    header h1 { color:var(--header-text); font-size:1.3rem; font-weight:800; }
+    .season-badge { font-size:.75rem; background:rgba(255,255,255,.5); color:var(--header-text); padding:3px 10px; border-radius:20px; font-weight:600; }
+    #month-nav { display:flex; align-items:center; gap:14px; position:relative; z-index:1; margin-top:12px; }
+    #month-nav button { background:rgba(255,255,255,.4); border:none; color:var(--header-text); width:30px; height:30px; border-radius:50%; cursor:pointer; font-size:1rem; display:flex; align-items:center; justify-content:center; transition:background .2s; }
+    #month-nav button:hover { background:rgba(255,255,255,.7); }
+    #current-month { font-size:1.6rem; font-weight:800; color:var(--header-text); letter-spacing:-.5px; }
+
+    /* ── LAYOUT ── */
+    .container { max-width:680px; margin:-36px auto 0; padding:0 16px 100px; position:relative; z-index:2; }
+
+    /* ── SUMMARY ── */
+    .summary { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin-bottom:12px; }
+    .card { background:white; border-radius:14px; padding:14px 10px; text-align:center; box-shadow:0 2px 12px rgba(0,0,0,.07); border:1px solid var(--card-border); }
+    .card .label { font-size:.72rem; color:var(--subtext); margin-bottom:5px; font-weight:500; }
+    .card .amount { font-size:1rem; font-weight:800; letter-spacing:-.4px; }
+    .card.income .amount { color:var(--income-color); }
+    .card.expense .amount { color:var(--expense-color); }
+    .card.balance .amount { color:var(--balance-color); }
+
+    /* ── SECTION ── */
+    .section { background:white; border-radius:16px; padding:18px; margin-bottom:12px; box-shadow:0 2px 12px rgba(0,0,0,.06); border:1px solid var(--card-border); }
+    .sec-title { font-size:.85rem; font-weight:700; color:var(--subtext); margin-bottom:12px; display:flex; align-items:center; gap:6px; }
+
+    /* ── BUDGET ── */
+    .budget-row { display:flex; align-items:center; gap:8px; margin-bottom:12px; }
+    .budget-input-wrap { display:flex; align-items:center; gap:6px; flex:1; background:var(--bg); border:1px solid var(--card-border); border-radius:8px; padding:7px 12px; }
+    .budget-input-wrap span { font-size:.85rem; color:var(--subtext); white-space:nowrap; }
+    #budget-input { border:none; background:transparent; font-size:.95rem; font-weight:700; color:var(--text); width:100%; outline:none; }
+    .btn-save-budget { padding:8px 14px; background:var(--accent); color:white; border:none; border-radius:8px; font-size:.82rem; font-weight:700; cursor:pointer; }
+    .btn-save-budget:hover { opacity:.85; }
+    .budget-bar-wrap { height:10px; background:var(--bg); border-radius:99px; overflow:hidden; margin-bottom:6px; }
+    .budget-bar { height:100%; border-radius:99px; transition:width .5s ease,background .4s; background:var(--accent2); }
+    .budget-labels { display:flex; justify-content:space-between; font-size:.73rem; color:var(--subtext); }
+    .budget-warn { color:#ef4444 !important; font-weight:700; }
+
+    /* ── FORM ── */
+    .form-row { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:8px; }
+    .form-row.full { grid-template-columns:1fr; }
+    input[type=text],input[type=number],input[type=date],select { width:100%; padding:9px 12px; border:1px solid var(--card-border); border-radius:8px; font-size:.88rem; background:var(--bg); color:var(--text); outline:none; transition:border-color .2s; }
+    input:focus,select:focus { border-color:var(--accent); }
+    .type-toggle { display:flex; border:1px solid var(--card-border); border-radius:8px; overflow:hidden; }
+    .type-toggle button { flex:1; padding:9px; border:none; background:var(--bg); cursor:pointer; font-size:.85rem; font-weight:600; color:var(--subtext); transition:background .2s,color .2s; }
+    .type-toggle button.active-income { background:var(--income-color); color:white; }
+    .type-toggle button.active-expense { background:var(--expense-color); color:white; }
+    .btn-add { width:100%; padding:11px; background:linear-gradient(135deg,var(--header-from),var(--accent)); color:white; border:none; border-radius:10px; font-size:.95rem; font-weight:700; cursor:pointer; margin-top:4px; transition:opacity .2s; }
+    .btn-add:hover { opacity:.88; }
+
+    /* ── LIST ── */
+    .list-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; }
+    .filter-tabs { display:flex; gap:6px; }
+    .filter-tabs button { padding:4px 12px; border:1.5px solid var(--card-border); background:white; border-radius:20px; font-size:.75rem; font-weight:600; cursor:pointer; color:var(--subtext); transition:all .2s; }
+    .filter-tabs button.active { background:var(--accent); color:white; border-color:var(--accent); }
+    .date-group-label { font-size:.73rem; font-weight:700; color:var(--subtext); padding:6px 4px 4px; }
+    .tx-item { display:flex; align-items:center; padding:11px 14px; border-radius:10px; gap:10px; margin-bottom:4px; background:white; border:1px solid var(--card-border); transition:box-shadow .15s; }
+    .tx-item:hover { box-shadow:0 2px 8px rgba(0,0,0,.08); }
+    .tx-icon { width:36px; height:36px; border-radius:10px; display:flex; align-items:center; justify-content:center; font-size:1.1rem; flex-shrink:0; }
+    .tx-icon.income { background:var(--badge-income); }
+    .tx-icon.expense { background:var(--badge-expense); }
+    .tx-info { flex:1; min-width:0; }
+    .tx-desc { font-size:.88rem; font-weight:600; }
+    .tx-meta { font-size:.72rem; color:var(--subtext); margin-top:2px; }
+    .tx-amount { font-size:.9rem; font-weight:800; white-space:nowrap; }
+    .tx-amount.income { color:var(--income-color); }
+    .tx-amount.expense { color:var(--expense-color); }
+    .tx-del { background:none; border:none; color:var(--card-border); cursor:pointer; font-size:.85rem; padding:4px; transition:color .15s; }
+    .tx-del:hover { color:#ef4444; }
+    .empty { text-align:center; padding:36px; color:var(--subtext); font-size:.88rem; }
+
+    /* ── MUSIC BUTTON ── */
+    #music-btn {
+      position:fixed; bottom:24px; right:20px; z-index:999;
+      background:white; border:2px solid var(--card-border);
+      border-radius:50px; padding:10px 16px;
+      display:flex; align-items:center; gap:8px;
+      box-shadow:0 4px 20px rgba(0,0,0,.12);
+      cursor:pointer; user-select:none;
+      transition:all .3s; font-size:.82rem; font-weight:700; color:var(--text);
+    }
+    #music-btn:hover { transform:translateY(-2px); box-shadow:0 6px 24px rgba(0,0,0,.16); }
+    #music-btn .music-icon { font-size:1.3rem; transition:all .4s; }
+    #music-btn.horror { border-color:#7f1d1d; background:#1c0a0a; color:#fca5a5; animation:shake 2.5s infinite; }
+    #music-btn.happy  { border-color:#fbbf24; background:#fef9c3; color:#92400e; }
+    #music-btn.calm   { border-color:var(--card-border); background:white; color:var(--text); }
+    #music-btn.muted  { opacity:.55; }
+
+    #music-bars { display:flex; align-items:flex-end; gap:2px; height:14px; }
+    #music-bars span {
+      width:3px; border-radius:2px; background:var(--accent);
+      animation:bar 0.8s ease-in-out infinite;
+      transform-origin:bottom;
+    }
+    #music-bars span:nth-child(1){ height:6px; animation-delay:0s; }
+    #music-bars span:nth-child(2){ height:12px; animation-delay:.15s; }
+    #music-bars span:nth-child(3){ height:8px; animation-delay:.3s; }
+    #music-bars span:nth-child(4){ height:14px; animation-delay:.1s; }
+    #music-bars span:nth-child(5){ height:5px; animation-delay:.25s; }
+    .muted #music-bars span { animation:none; height:4px !important; }
+    .horror #music-bars span { background:#ef4444; }
+    .happy  #music-bars span { background:#f59e0b; }
+
+    @keyframes bar { 0%,100%{transform:scaleY(.4)} 50%{transform:scaleY(1)} }
+    @keyframes shake { 0%,100%{transform:translateX(0)} 10%{transform:translateX(-2px)} 20%{transform:translateX(2px)} 30%{transform:translateX(-1px)} 40%{transform:translateX(1px)} 50%{transform:translateX(0)} }
+
+    /* ── SEASONAL THEMES ── */
+    body.spring { --bg:#fdf2f8; --header-from:#f9a8d4; --header-to:#fbcfe8; --header-text:#831843; --accent:#ec4899; --accent2:#f472b6; --card-border:#fce7f3; --badge-income:#fdf2f8; --badge-expense:#fff1f2; --income-color:#be185d; --expense-color:#9f1239; --text:#3b1a2e; --subtext:#9d7a8a; }
+    body.summer { --bg:#f0f9ff; --header-from:#38bdf8; --header-to:#7dd3fc; --header-text:#0c4a6e; --accent:#0ea5e9; --accent2:#38bdf8; --card-border:#bae6fd; --badge-income:#f0f9ff; --badge-expense:#fff7ed; --income-color:#0369a1; --expense-color:#ea580c; --text:#0c2944; --subtext:#6b9ab8; }
+    body.autumn { --bg:#fffbeb; --header-from:#fb923c; --header-to:#fbbf24; --header-text:#7c2d12; --accent:#f97316; --accent2:#fb923c; --card-border:#fed7aa; --badge-income:#fff7ed; --badge-expense:#fef2f2; --income-color:#c2410c; --expense-color:#9f1239; --text:#431407; --subtext:#a16207; }
+    body.winter { --bg:#f8fafc; --header-from:#94a3b8; --header-to:#cbd5e1; --header-text:#0f172a; --accent:#475569; --accent2:#64748b; --card-border:#e2e8f0; --badge-income:#f1f5f9; --badge-expense:#fff1f2; --income-color:#1e40af; --expense-color:#9f1239; --text:#0f172a; --subtext:#64748b; }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="hd hd1" id="hd1"></div>
+  <div class="hd hd2" id="hd2"></div>
+  <div class="hd hd3" id="hd3"></div>
+  <div class="header-top">
+    <h1>가계부</h1>
+    <span class="season-badge" id="season-badge"></span>
+  </div>
+  <div id="month-nav">
+    <button onclick="changeMonth(-1)">&#8249;</button>
+    <span id="current-month"></span>
+    <button onclick="changeMonth(1)">&#8250;</button>
+  </div>
+</header>
+
+<div class="container">
+  <div class="summary">
+    <div class="card income"><div class="label">수입</div><div class="amount" id="total-income">₩0</div></div>
+    <div class="card expense"><div class="label">지출</div><div class="amount" id="total-expense">₩0</div></div>
+    <div class="card balance"><div class="label">잔액</div><div class="amount" id="total-balance">₩0</div></div>
+  </div>
+
+  <!-- 예산 -->
+  <div class="section">
+    <div class="sec-title">🎯 이번 달 지출 예산</div>
+    <div class="budget-row">
+      <div class="budget-input-wrap">
+        <span>₩</span>
+        <input type="number" id="budget-input" placeholder="예산 금액 입력" min="0">
+      </div>
+      <button class="btn-save-budget" onclick="saveBudget()">저장</button>
+    </div>
+    <div class="budget-bar-wrap"><div class="budget-bar" id="budget-bar" style="width:0%"></div></div>
+    <div class="budget-labels">
+      <span id="budget-spent-label">지출 ₩0</span>
+      <span id="budget-remain-label">예산 미설정</span>
+    </div>
+  </div>
+
+  <!-- 입력 폼 -->
+  <div class="section">
+    <div class="sec-title">✏️ 내역 추가</div>
+    <div class="form-row">
+      <div class="type-toggle">
+        <button id="btn-income" class="active-income" onclick="setType('income')">수입</button>
+        <button id="btn-expense" onclick="setType('expense')">지출</button>
+      </div>
+      <input type="date" id="input-date">
+    </div>
+    <div class="form-row">
+      <input type="text" id="input-desc" placeholder="내용 (예: 점심식사)">
+      <select id="input-category">
+        <option value="">카테고리</option>
+        <optgroup label="수입"><option>급여</option><option>부수입</option><option>용돈</option></optgroup>
+        <optgroup label="지출"><option>식비</option><option>교통</option><option>쇼핑</option><option>의료</option><option>여가</option><option>통신</option><option>공과금</option><option>기타</option></optgroup>
+      </select>
+    </div>
+    <div class="form-row full">
+      <input type="number" id="input-amount" placeholder="금액 (원)" min="0">
+    </div>
+    <button class="btn-add" onclick="addTransaction()">추가하기</button>
+  </div>
+
+  <!-- 내역 -->
+  <div class="section">
+    <div class="list-header">
+      <div class="sec-title" style="margin:0"><span id="list-deco">📋</span> 내역</div>
+      <div class="filter-tabs">
+        <button class="active" onclick="setFilter('all',this)">전체</button>
+        <button onclick="setFilter('income',this)">수입</button>
+        <button onclick="setFilter('expense',this)">지출</button>
+      </div>
+    </div>
+    <div id="tx-list"></div>
+  </div>
+</div>
+
+<!-- 음악 버튼 -->
+<div id="music-btn" class="calm" onclick="handleMusicClick()">
+  <span class="music-icon">🎵</span>
+  <div id="music-bars">
+    <span></span><span></span><span></span><span></span><span></span>
+  </div>
+  <span id="music-label">음악 시작</span>
+</div>
+
+<script>
+/* ═══════════════════════════════════════════
+   SEASONAL THEME
+═══════════════════════════════════════════ */
+const SEASONS = {
+  spring:{ months:[3,4,5],  badge:'🌸 봄',   decos:['🌸','🌷','🌿'], deco:'🌸' },
+  summer:{ months:[6,7,8],  badge:'☀️ 여름',  decos:['🌊','☀️','🐚'], deco:'🌊' },
+  autumn:{ months:[9,10,11],badge:'🍁 가을',  decos:['🍁','🍂','🌾'], deco:'🍁' },
+  winter:{ months:[12,1,2], badge:'❄️ 겨울',  decos:['❄️','⛄','🌨️'],  deco:'❄️' },
+};
+const CAT_ICON = { '급여':'💰','부수입':'💵','용돈':'🪙','식비':'🍽️','교통':'🚌','쇼핑':'🛍️','의료':'💊','여가':'🎮','통신':'📱','공과금':'🏠','기타':'📌','':'📋' };
+
+function getSeason(m){ return Object.entries(SEASONS).find(([,s])=>s.months.includes(m))?.[0]||'spring'; }
+
+function applyTheme(m){
+  const s=getSeason(m), info=SEASONS[s];
+  document.body.className=s;
+  document.getElementById('season-badge').textContent=info.badge;
+  document.getElementById('hd1').textContent=info.decos[0];
+  document.getElementById('hd2').textContent=info.decos[1];
+  document.getElementById('hd3').textContent=info.decos[2];
+  document.getElementById('list-deco').textContent=info.deco;
+}
+
+/* ═══════════════════════════════════════════
+   DATA
+═══════════════════════════════════════════ */
+let currentType='income', currentFilter='all', viewYear, viewMonth;
+
+function txKey(){ return `gjm_tx_${viewYear}_${viewMonth}`; }
+function budgetKey(){ return `gjm_budget_${viewYear}_${viewMonth}`; }
+function loadTx(){ return JSON.parse(localStorage.getItem(txKey())||'[]'); }
+function loadBudget(){ return parseInt(localStorage.getItem(budgetKey()))||0; }
+function saveTx(d){ localStorage.setItem(txKey(),JSON.stringify(d)); }
+
+function initMonth(){
+  const now=new Date();
+  viewYear=now.getFullYear(); viewMonth=now.getMonth()+1;
+  document.getElementById('input-date').value=now.toISOString().slice(0,10);
+}
+function changeMonth(d){ viewMonth+=d; if(viewMonth>12){viewMonth=1;viewYear++;} if(viewMonth<1){viewMonth=12;viewYear--;} render(); }
+function setType(t){ currentType=t; document.getElementById('btn-income').className=t==='income'?'active-income':''; document.getElementById('btn-expense').className=t==='expense'?'active-expense':''; }
+function setFilter(f,btn){ currentFilter=f; document.querySelectorAll('.filter-tabs button').forEach(b=>b.classList.remove('active')); btn.classList.add('active'); renderList(); }
+
+function saveBudget(){
+  const v=parseInt(document.getElementById('budget-input').value);
+  if(!v||v<=0){alert('올바른 예산을 입력하세요.');return;}
+  localStorage.setItem(budgetKey(),v); render();
+}
+
+function addTransaction(){
+  const desc=document.getElementById('input-desc').value.trim();
+  const amount=parseInt(document.getElementById('input-amount').value);
+  const date=document.getElementById('input-date').value;
+  const cat=document.getElementById('input-category').value;
+  if(!desc){alert('내용을 입력하세요.');return;}
+  if(!amount||amount<=0){alert('금액을 입력하세요.');return;}
+  if(!date){alert('날짜를 선택하세요.');return;}
+  const data=loadTx();
+  data.push({id:Date.now(),type:currentType,desc,amount,date,category:cat});
+  data.sort((a,b)=>b.date.localeCompare(a.date));
+  saveTx(data);
+  document.getElementById('input-desc').value='';
+  document.getElementById('input-amount').value='';
+  document.getElementById('input-category').value='';
+  render();
+}
+
+function deleteTransaction(id){ saveTx(loadTx().filter(t=>t.id!==id)); render(); }
+
+function fmt(n){ return '₩'+n.toLocaleString('ko-KR'); }
+function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+/* ═══════════════════════════════════════════
+   RENDER
+═══════════════════════════════════════════ */
+function renderSummary(){
+  const data=loadTx();
+  const inc=data.filter(t=>t.type==='income').reduce((s,t)=>s+t.amount,0);
+  const exp=data.filter(t=>t.type==='expense').reduce((s,t)=>s+t.amount,0);
+  const bal=inc-exp;
+  document.getElementById('total-income').textContent=fmt(inc);
+  document.getElementById('total-expense').textContent=fmt(exp);
+  const el=document.getElementById('total-balance');
+  el.textContent=fmt(Math.abs(bal));
+  el.style.color=bal>=0?'var(--balance-color)':'#ef4444';
+}
+
+function renderBudget(){
+  const data=loadTx();
+  const exp=data.filter(t=>t.type==='expense').reduce((s,t)=>s+t.amount,0);
+  const budget=loadBudget();
+  document.getElementById('budget-input').value=budget||'';
+  document.getElementById('budget-spent-label').textContent='지출 '+fmt(exp);
+  const bar=document.getElementById('budget-bar');
+  if(!budget){ bar.style.width='0%'; bar.style.background='var(--accent2)'; document.getElementById('budget-remain-label').textContent='예산 미설정'; return; }
+  const pct=Math.min((exp/budget)*100,100);
+  bar.style.width=pct+'%';
+  const remain=budget-exp;
+  const rl=document.getElementById('budget-remain-label');
+  if(pct>=100){ bar.style.background='#ef4444'; rl.className='budget-warn'; rl.textContent='🚨 초과 '+fmt(Math.abs(remain)); }
+  else if(pct>=80){ bar.style.background='#f97316'; rl.className='budget-warn'; rl.textContent='⚠️ 잔여 '+fmt(remain)+' ('+Math.round(pct)+'%)'; }
+  else{ bar.style.background='var(--accent2)'; rl.className=''; rl.textContent='잔여 '+fmt(remain)+' ('+Math.round(pct)+'%)'; }
+}
+
+function renderList(){
+  const data=loadTx();
+  const filtered=currentFilter==='all'?data:data.filter(t=>t.type===currentFilter);
+  const list=document.getElementById('tx-list');
+  if(!filtered.length){ list.innerHTML='<div class="empty">내역이 없습니다.</div>'; return; }
+  const groups={};
+  filtered.forEach(t=>{ if(!groups[t.date])groups[t.date]=[]; groups[t.date].push(t); });
+  const DOW=['일','월','화','수','목','금','토'];
+  list.innerHTML=Object.entries(groups).sort((a,b)=>b[0].localeCompare(a[0])).map(([date,items])=>{
+    const [,m,d]=date.split('-');
+    const dow=DOW[new Date(date).getDay()];
+    const dayTotal=items.reduce((s,t)=>s+(t.type==='expense'?-t.amount:t.amount),0);
+    return `<div class="date-group-label">${parseInt(m)}월 ${parseInt(d)}일 (${dow})<span style="float:right;font-weight:700;color:${dayTotal>=0?'var(--income-color)':'var(--expense-color)'}">${dayTotal>=0?'+':''}${fmt(dayTotal)}</span></div>
+    ${items.map(t=>`<div class="tx-item"><div class="tx-icon ${t.type}">${CAT_ICON[t.category]||'📋'}</div><div class="tx-info"><div class="tx-desc">${esc(t.desc)}</div><div class="tx-meta">${t.category?esc(t.category):'미분류'}</div></div><div class="tx-amount ${t.type}">${t.type==='income'?'+':'-'}${fmt(t.amount)}</div><button class="tx-del" onclick="deleteTransaction(${t.id})">✕</button></div>`).join('')}`;
+  }).join('');
+}
+
+function render(){
+  applyTheme(viewMonth);
+  document.getElementById('current-month').textContent=`${viewYear}년 ${viewMonth}월`;
+  renderSummary(); renderBudget(); renderList();
+  updateMusicState();
+}
+
+/* ═══════════════════════════════════════════
+   MUSIC ENGINE
+═══════════════════════════════════════════ */
+const M2F = m => 440 * Math.pow(2, (m-69)/12);
+
+// Scale definitions (MIDI → Hz)
+const SCALE = {
+  calm:   [57,60,62,64,67,69,72].map(M2F),   // A minor pentatonic
+  horror: [60,63,66,69].map(M2F),              // diminished 7th
+  happy:  [60,64,67,69,72,76].map(M2F),        // C major pentatonic
+};
+
+class MusicEngine {
+  constructor(){
+    this.ctx=null; this.master=null; this.dry=null; this.wet=null;
+    this.state='calm'; this.running=false; this.muted=false;
+    this.beat=0; this.nextTime=0; this.rafID=null;
+    this.cleanups=[];
+  }
+
+  init(){
+    if(this.ctx) return;
+    this.ctx = new (window.AudioContext||window.webkitAudioContext)();
+
+    this.master = this.ctx.createGain();
+    this.master.gain.value = 0;
+    this.master.connect(this.ctx.destination);
+
+    // Reverb (synthesized impulse response)
+    const conv = this.ctx.createConvolver();
+    const len  = this.ctx.sampleRate * 2.2;
+    const buf  = this.ctx.createBuffer(2, len, this.ctx.sampleRate);
+    for(let c=0;c<2;c++){
+      const d=buf.getChannelData(c);
+      for(let i=0;i<len;i++) d[i]=(Math.random()*2-1)*Math.pow(1-i/len,2.4);
+    }
+    conv.buffer=buf;
+
+    this.dry=this.ctx.createGain(); this.dry.gain.value=0.72; this.dry.connect(this.master);
+    this.wet=this.ctx.createGain(); this.wet.gain.value=0.28; this.wet.connect(conv); conv.connect(this.master);
+  }
+
+  // Schedule one note
+  note(freq, t, dur, wave, vol, bus='dry'){
+    const ctx=this.ctx;
+    const osc=ctx.createOscillator();
+    const g=ctx.createGain();
+    osc.type=wave; osc.frequency.value=freq;
+    const atk=Math.min(0.08,dur*0.15), rel=Math.min(0.25,dur*0.35);
+    g.gain.setValueAtTime(0,t);
+    g.gain.linearRampToValueAtTime(vol,t+atk);
+    g.gain.setValueAtTime(vol,t+dur-rel);
+    g.gain.exponentialRampToValueAtTime(0.0001,t+dur);
+    osc.connect(g); g.connect(bus==='wet'?this.wet:this.dry);
+    osc.start(t); osc.stop(t+dur+0.05);
+  }
+
+  // Noise burst (for horror)
+  noise(t, dur, cutoff){
+    const ctx=this.ctx;
+    const len=Math.ceil(ctx.sampleRate*dur);
+    const buf=ctx.createBuffer(1,len,ctx.sampleRate);
+    const d=buf.getChannelData(0);
+    for(let i=0;i<len;i++) d[i]=Math.random()*2-1;
+    const src=ctx.createBufferSource();
+    const filt=ctx.createBiquadFilter();
+    const g=ctx.createGain();
+    filt.type='lowpass'; filt.frequency.value=cutoff;
+    g.gain.setValueAtTime(0.18,t); g.gain.linearRampToValueAtTime(0,t+dur);
+    src.buffer=buf; src.connect(filt); filt.connect(g); g.connect(this.dry);
+    src.start(t); src.stop(t+dur+0.01);
+  }
+
+  // Start a continuous drone with fade-in, returns cleanup fn
+  drone(midi, wave, vol, tremolo=false){
+    const ctx=this.ctx, now=ctx.currentTime;
+    const osc=ctx.createOscillator();
+    const fadeG=ctx.createGain();
+    const baseG=ctx.createGain();
+    osc.type=wave; osc.frequency.value=M2F(midi);
+    baseG.gain.value=vol;
+    fadeG.gain.setValueAtTime(0,now);
+    fadeG.gain.linearRampToValueAtTime(1,now+2.5);
+    osc.connect(baseG); baseG.connect(fadeG); fadeG.connect(this.dry);
+    osc.start();
+
+    let lfo=null;
+    if(tremolo){
+      lfo=ctx.createOscillator();
+      const lg=ctx.createGain();
+      lfo.frequency.value=3.8+Math.random()*0.6;
+      lg.gain.value=vol*0.35;
+      lfo.connect(lg); lg.connect(baseG.gain);
+      lfo.start();
+    }
+
+    this.cleanups.push(stopAt=>{
+      fadeG.gain.cancelScheduledValues(stopAt-0.6);
+      fadeG.gain.setValueAtTime(fadeG.gain.value,stopAt-0.6);
+      fadeG.gain.linearRampToValueAtTime(0,stopAt);
+      try{ osc.stop(stopAt+0.05); }catch(e){}
+      if(lfo){ try{ lfo.stop(stopAt+0.05); }catch(e){} }
+    });
+  }
+
+  flushCleanups(){
+    const t=this.ctx.currentTime+0.7;
+    this.cleanups.forEach(fn=>fn(t));
+    this.cleanups=[];
+  }
+
+  setupDrones(){
+    if(this.state==='calm'){
+      this.drone(45,'sine',0.055);  // A2
+      this.drone(52,'sine',0.035);  // E3
+    } else if(this.state==='horror'){
+      this.drone(36,'sawtooth',0.10,true);  // C2, tremolo
+      this.drone(42,'sawtooth',0.07,true);  // F#2, tremolo
+    } else {
+      this.drone(48,'sine',0.038);  // C3 (happy)
+    }
+  }
+
+  scheduleCurrentBeat(){
+    const t=this.nextTime;
+    if(this.state==='calm'){
+      if(Math.random()<0.32){
+        const note=SCALE.calm[Math.floor(Math.random()*SCALE.calm.length)];
+        this.note(note, t, 1.8+Math.random()*2.2, 'sine', 0.26, 'wet');
+      }
+      if(this.beat%8===0)
+        this.note(M2F(45), t, 0.9, 'sine', 0.18, 'dry');
+
+    } else if(this.state==='horror'){
+      if(Math.random()<0.17){
+        const note=SCALE.horror[Math.floor(Math.random()*SCALE.horror.length)];
+        this.note(note, t, 0.15+Math.random()*0.4, 'sawtooth', 0.14, 'wet');
+      }
+      if(this.beat%7===0){
+        this.note(M2F(36), t, 1.4, 'sawtooth', 0.20, 'dry');
+        this.noise(t, 0.7, 90);
+      }
+      // Occasional high screech
+      if(Math.random()<0.04){
+        this.note(M2F(84+Math.floor(Math.random()*7)), t, 0.08, 'sawtooth', 0.07, 'wet');
+      }
+      // Random low thud
+      if(Math.random()<0.06){
+        this.note(M2F(30+Math.floor(Math.random()*4)), t, 0.3, 'sawtooth', 0.18, 'dry');
+      }
+
+    } else { // happy
+      const PATTERN=[1,0,1,1,0,1,0,1];
+      if(PATTERN[this.beat%8]){
+        const note=SCALE.happy[Math.floor(Math.random()*SCALE.happy.length)];
+        this.note(note, t, 0.17, 'triangle', 0.36, 'dry');
+      }
+      // Bass
+      if(this.beat%8===0){
+        this.note(M2F(48), t, 0.38, 'triangle', 0.28, 'dry');  // C3
+      } else if(this.beat%8===4){
+        this.note(M2F(55), t, 0.38, 'triangle', 0.22, 'dry');  // G3
+      }
+      // Chord splash every 16 beats
+      if(this.beat%16===0){
+        [60,64,67].forEach(n=> this.note(M2F(n), t, 0.5, 'sine', 0.1, 'wet'));
+      }
+    }
+  }
+
+  advance(){
+    const bpm = this.state==='happy'?112 : this.state==='horror'?48 : 60;
+    this.nextTime += (60/bpm)/2;  // 8th notes
+    this.beat++;
+  }
+
+  loop(){
+    if(!this.running) return;
+    while(this.nextTime < this.ctx.currentTime+0.28){
+      this.scheduleCurrentBeat();
+      this.advance();
+    }
+    this.rafID=requestAnimationFrame(()=>this.loop());
+  }
+
+  setState(newState){
+    this.state=newState;
+    if(!this.running) return;
+    this.flushCleanups();
+    this.beat=0;
+    setTimeout(()=>this.setupDrones(), 650);
+    // Adjust master volume per state
+    const vol = newState==='horror'?0.3 : 0.22;
+    if(!this.muted){
+      this.master.gain.cancelScheduledValues(this.ctx.currentTime);
+      this.master.gain.linearRampToValueAtTime(vol, this.ctx.currentTime+0.8);
+    }
+  }
+
+  start(){
+    this.init();
+    if(this.running) return;
+    this.running=true;
+    this.nextTime=this.ctx.currentTime+0.15;
+    this.beat=0;
+    this.master.gain.setValueAtTime(0,this.ctx.currentTime);
+    this.master.gain.linearRampToValueAtTime(this.state==='horror'?0.3:0.22, this.ctx.currentTime+2);
+    this.setupDrones();
+    this.loop();
+  }
+
+  stop(){
+    this.running=false;
+    if(this.rafID){ cancelAnimationFrame(this.rafID); this.rafID=null; }
+    this.flushCleanups();
+    if(this.ctx && this.master){
+      this.master.gain.cancelScheduledValues(this.ctx.currentTime);
+      this.master.gain.linearRampToValueAtTime(0, this.ctx.currentTime+1);
+    }
+  }
+
+  setMute(m){
+    this.muted=m;
+    if(!this.ctx||!this.master) return;
+    const now=this.ctx.currentTime;
+    this.master.gain.cancelScheduledValues(now);
+    this.master.gain.setValueAtTime(this.master.gain.value,now);
+    if(m) this.master.gain.linearRampToValueAtTime(0,now+0.4);
+    else   this.master.gain.linearRampToValueAtTime(this.state==='horror'?0.3:0.22, now+0.6);
+  }
+}
+
+const music = new MusicEngine();
+let musicStarted = false;
+let musicMuted = false;
+
+const STATE_META = {
+  calm:   { label:'잔잔한', icon:'🎵', cls:'calm'   },
+  horror: { label:'긴장!!', icon:'💀', cls:'horror'  },
+  happy:  { label:'행복한', icon:'🎉', cls:'happy'   },
+};
+
+function getMusicState(){
+  const data=loadTx();
+  const income=data.filter(t=>t.type==='income').reduce((s,t)=>s+t.amount,0);
+  const expense=data.filter(t=>t.type==='expense').reduce((s,t)=>s+t.amount,0);
+  const budget=loadBudget();
+  if(budget>0 && expense>=budget) return 'horror';
+  if(income>0 && income>expense)  return 'happy';
+  return 'calm';
+}
+
+function updateMusicState(){
+  const s=getMusicState();
+  const meta=STATE_META[s];
+  const btn=document.getElementById('music-btn');
+  btn.className=meta.cls+(musicMuted?' muted':'');
+  document.querySelector('#music-btn .music-icon').textContent=meta.icon;
+  document.getElementById('music-label').textContent=musicStarted?(musicMuted?'음소거':meta.label):'음악 시작';
+  if(musicStarted) music.setState(s);
+}
+
+function handleMusicClick(){
+  if(!musicStarted){
+    musicStarted=true;
+    music.state=getMusicState();
+    music.start();
+    document.getElementById('music-label').textContent=STATE_META[music.state].label;
+  } else {
+    musicMuted=!musicMuted;
+    music.setMute(musicMuted);
+    document.getElementById('music-label').textContent=musicMuted?'음소거':STATE_META[music.state].label;
+    const btn=document.getElementById('music-btn');
+    if(musicMuted) btn.classList.add('muted'); else btn.classList.remove('muted');
+  }
+}
+
+/* ═══════════════════════════════════════════
+   BOOT
+═══════════════════════════════════════════ */
+initMonth();
+render();
+</script>
+</body>
+</html>

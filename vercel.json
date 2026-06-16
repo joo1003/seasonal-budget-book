@@ -1,9 +1,9 @@
 {
   "version": 2,
   "builds": [
-    { "src": "가계부.html", "use": "@vercel/static" }
+    { "src": "gaji-market/package.json", "use": "@vercel/next" }
   ],
   "routes": [
-    { "src": "/", "dest": "/가계부.html" }
+    { "src": "/(.*)", "dest": "gaji-market/$1" }
   ]
 }

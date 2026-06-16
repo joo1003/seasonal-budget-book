@@ -1,38 +1,97 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useRef } from 'react'
+import { createClient } from '@/lib/supabase/client'
 import { updatePost } from '../actions'
+import Image from 'next/image'
 
 const CATEGORIES = ['디지털/가전', '의류/잡화', '가구/인테리어', '도서/문구', '스포츠/레저', '게임/취미', '식물', '기타']
 
 interface Post {
   id: string
+  user_id: string
   title: string
   description: string
   price: number
   category: string
+  image_url?: string | null
 }
 
 export default function EditForm({ post }: { post: Post }) {
+  const supabase = createClient()
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
   const [title, setTitle] = useState(post.title)
   const [description, setDescription] = useState(post.description)
   const [price, setPrice] = useState(post.price.toLocaleString())
   const [category, setCategory] = useState(post.category)
+
+  // 이미지 상태
+  const [currentImageUrl, setCurrentImageUrl] = useState<string | null>(post.image_url ?? null)
+  const [newImageFile, setNewImageFile] = useState<File | null>(null)
+  const [newImagePreview, setNewImagePreview] = useState<string | null>(null)
+
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+
+  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setNewImageFile(file)
+    setNewImagePreview(URL.createObjectURL(file))
+  }
+
+  const handleRemoveImage = () => {
+    setCurrentImageUrl(null)
+    setNewImageFile(null)
+    setNewImagePreview(null)
+    if (fileInputRef.current) fileInputRef.current.value = ''
+  }
+
+  const displayImage = newImagePreview ?? currentImageUrl
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
     if (!category) { setError('카테고리를 선택해주세요.'); return }
     setLoading(true)
+
     try {
-      await updatePost(post.id, {
+      let image_url: string | null | undefined = undefined
+
+      if (newImageFile) {
+        // 새 이미지 업로드
+        const ext = newImageFile.name.split('.').pop()
+        const path = `${post.user_id}/${crypto.randomUUID()}.${ext}`
+        const { error: uploadError } = await supabase.storage
+          .from('post-images')
+          .upload(path, newImageFile)
+
+        if (uploadError) {
+          setError('이미지 업로드에 실패했어요. 다시 시도해주세요.')
+          setLoading(false)
+          return
+        }
+
+        const { data: urlData } = supabase.storage.from('post-images').getPublicUrl(path)
+        image_url = urlData.publicUrl
+      } else if (currentImageUrl === null && post.image_url) {
+        // 이미지 삭제 요청
+        image_url = null
+      }
+
+      const updateData: Parameters<typeof updatePost>[1] = {
         title,
         description,
         price: parseInt(price.replace(/,/g, ''), 10),
         category,
-      })
+      }
+
+      if (image_url !== undefined) {
+        updateData.image_url = image_url
+      }
+
+      await updatePost(post.id, updateData)
     } catch {
       setError('오류가 발생했어요. 다시 시도해주세요.')
       setLoading(false)
@@ -66,6 +125,64 @@ export default function EditForm({ post }: { post: Post }) {
 
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-6">
+
+      {/* 이미지 */}
+      <div>
+        <label style={labelStyle}>상품 사진</label>
+        {displayImage ? (
+          <div className="relative w-full rounded-2xl overflow-hidden" style={{ height: '220px' }}>
+            <Image
+              src={displayImage}
+              alt="상품 이미지"
+              fill
+              style={{ objectFit: 'cover' }}
+            />
+            <div className="absolute top-2 right-2 flex gap-2">
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                className="px-3 py-1.5 rounded-full text-xs font-bold"
+                style={{ background: 'rgba(0,0,0,0.55)', color: 'white' }}
+              >
+                교체
+              </button>
+              <button
+                type="button"
+                onClick={handleRemoveImage}
+                className="w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold"
+                style={{ background: 'rgba(0,0,0,0.55)', color: 'white' }}
+              >
+                ✕
+              </button>
+            </div>
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            className="w-full flex flex-col items-center justify-center gap-2 rounded-2xl transition-all"
+            style={{
+              height: '140px',
+              border: '2px dashed rgba(196,181,253,0.6)',
+              background: '#FAF7FF',
+              color: '#A78BFA',
+              cursor: 'pointer',
+            }}
+          >
+            <span style={{ fontSize: '32px' }}>📷</span>
+            <span className="text-sm font-semibold">사진 추가하기</span>
+            <span className="text-xs" style={{ color: '#C4B5FD' }}>JPG, PNG, WEBP · 최대 10MB</span>
+          </button>
+        )}
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          onChange={handleImageChange}
+          className="hidden"
+        />
+      </div>
+
       <div>
         <label style={labelStyle}>제목 *</label>
         <input

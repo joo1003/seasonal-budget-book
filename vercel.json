@@ -1,0 +1,9 @@
+{
+  "version": 2,
+  "builds": [
+    { "src": "가계부.html", "use": "@vercel/static" }
+  ],
+  "routes": [
+    { "src": "/", "dest": "/가계부.html" }
+  ]
+}

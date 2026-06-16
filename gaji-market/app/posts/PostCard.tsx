@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import Image from 'next/image'
 
 interface Post {
   id: string
@@ -8,6 +9,7 @@ interface Post {
   status: string
   created_at: string
   user_id: string
+  image_url?: string | null
 }
 
 function timeAgo(dateStr: string) {
@@ -41,17 +43,36 @@ export default function PostCard({ post }: { post: Post }) {
           cursor: 'pointer',
         }}
       >
-        {/* 이미지 자리 */}
+        {/* 이미지 */}
         <div
-          className="w-full flex items-center justify-center"
+          className="w-full relative flex items-center justify-center"
           style={{ height: '140px', background: '#F5F0FF' }}
         >
-          <span style={{ fontSize: '40px' }}>🛍️</span>
+          {post.image_url ? (
+            <Image
+              src={post.image_url}
+              alt={post.title}
+              fill
+              style={{ objectFit: 'cover' }}
+              sizes="(max-width: 768px) 50vw, 25vw"
+            />
+          ) : (
+            <span style={{ fontSize: '40px' }}>🛍️</span>
+          )}
+          {post.status === 'sold' && (
+            <div
+              className="absolute inset-0 flex items-center justify-center"
+              style={{ background: 'rgba(0,0,0,0.45)' }}
+            >
+              <span className="text-white text-xs font-bold px-2 py-1 rounded-full" style={{ background: 'rgba(0,0,0,0.6)' }}>
+                판매완료
+              </span>
+            </div>
+          )}
         </div>
 
         {/* 내용 */}
         <div className="p-3">
-          {/* 상태 뱃지 */}
           <span
             className="text-xs font-bold px-2 py-0.5 rounded-full"
             style={{ background: status.bg, color: status.color }}
@@ -59,7 +80,6 @@ export default function PostCard({ post }: { post: Post }) {
             {status.text}
           </span>
 
-          {/* 제목 */}
           <p
             className="mt-1.5 text-sm font-semibold leading-snug line-clamp-2"
             style={{ color: '#3B0764' }}
@@ -67,12 +87,10 @@ export default function PostCard({ post }: { post: Post }) {
             {post.title}
           </p>
 
-          {/* 가격 */}
           <p className="mt-1 text-base font-black" style={{ color: '#6D28D9' }}>
             {post.price.toLocaleString()}원
           </p>
 
-          {/* 카테고리 · 시간 */}
           <p className="mt-1 text-xs" style={{ color: '#C4B5FD' }}>
             {post.category} · {timeAgo(post.created_at)}
           </p>

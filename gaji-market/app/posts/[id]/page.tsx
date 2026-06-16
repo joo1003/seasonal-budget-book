@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase/server'
 import { notFound } from 'next/navigation'
 import Header from '@/components/Header'
 import Link from 'next/link'
+import Image from 'next/image'
 import DeleteButton from './DeleteButton'
 
 const STATUS_LABEL: Record<string, { text: string; bg: string; color: string }> = {
@@ -70,10 +71,34 @@ export default async function PostDetailPage({
         >
           {/* 이미지 영역 */}
           <div
-            className="w-full flex items-center justify-center"
-            style={{ height: '260px', background: '#F5F0FF' }}
+            className="w-full relative flex items-center justify-center"
+            style={{ height: '300px', background: '#F5F0FF' }}
           >
-            <span style={{ fontSize: '72px' }}>🛍️</span>
+            {post.image_url ? (
+              <Image
+                src={post.image_url}
+                alt={post.title}
+                fill
+                style={{ objectFit: 'cover' }}
+                sizes="(max-width: 672px) 100vw, 672px"
+                priority
+              />
+            ) : (
+              <span style={{ fontSize: '72px' }}>🛍️</span>
+            )}
+            {post.status === 'sold' && (
+              <div
+                className="absolute inset-0 flex items-center justify-center"
+                style={{ background: 'rgba(0,0,0,0.45)' }}
+              >
+                <span
+                  className="text-white font-bold text-lg px-5 py-2 rounded-full"
+                  style={{ background: 'rgba(0,0,0,0.6)' }}
+                >
+                  판매완료
+                </span>
+              </div>
+            )}
           </div>
 
           <div className="p-6">

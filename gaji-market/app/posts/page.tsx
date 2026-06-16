@@ -16,7 +16,7 @@ export default async function PostsPage({
 
   let query = supabase
     .from('posts')
-    .select('id, title, price, category, status, created_at, user_id')
+    .select('id, title, price, category, status, created_at, user_id, image_url')
     .order('created_at', { ascending: false })
 
   if (category && category !== '전체') {

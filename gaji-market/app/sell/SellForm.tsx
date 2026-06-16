@@ -1,8 +1,9 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
+import Image from 'next/image'
 
 const CATEGORIES = [
   '디지털/가전',
@@ -18,13 +19,29 @@ const CATEGORIES = [
 export default function SellForm({ userId }: { userId: string }) {
   const router = useRouter()
   const supabase = createClient()
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
   const [price, setPrice] = useState('')
   const [category, setCategory] = useState('')
+  const [imageFile, setImageFile] = useState<File | null>(null)
+  const [imagePreview, setImagePreview] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+
+  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setImageFile(file)
+    setImagePreview(URL.createObjectURL(file))
+  }
+
+  const handleRemoveImage = () => {
+    setImageFile(null)
+    setImagePreview(null)
+    if (fileInputRef.current) fileInputRef.current.value = ''
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -37,12 +54,31 @@ export default function SellForm({ userId }: { userId: string }) {
 
     setLoading(true)
 
+    let image_url: string | null = null
+    if (imageFile) {
+      const ext = imageFile.name.split('.').pop()
+      const path = `${userId}/${crypto.randomUUID()}.${ext}`
+      const { error: uploadError } = await supabase.storage
+        .from('post-images')
+        .upload(path, imageFile)
+
+      if (uploadError) {
+        setError('이미지 업로드에 실패했어요. 다시 시도해주세요.')
+        setLoading(false)
+        return
+      }
+
+      const { data: urlData } = supabase.storage.from('post-images').getPublicUrl(path)
+      image_url = urlData.publicUrl
+    }
+
     const { error: insertError } = await supabase.from('posts').insert({
       user_id: userId,
       title,
       description,
       price: parseInt(price.replace(/,/g, ''), 10),
       category,
+      image_url,
     })
 
     setLoading(false)
@@ -52,7 +88,7 @@ export default function SellForm({ userId }: { userId: string }) {
       return
     }
 
-    router.push('/')
+    router.push('/posts')
   }
 
   const formatPrice = (value: string) => {
@@ -82,6 +118,54 @@ export default function SellForm({ userId }: { userId: string }) {
 
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-6">
+
+      {/* 이미지 업로드 */}
+      <div>
+        <label style={labelStyle}>상품 사진</label>
+        {imagePreview ? (
+          <div className="relative w-full rounded-2xl overflow-hidden" style={{ height: '220px' }}>
+            <Image
+              src={imagePreview}
+              alt="상품 미리보기"
+              fill
+              style={{ objectFit: 'cover' }}
+            />
+            <button
+              type="button"
+              onClick={handleRemoveImage}
+              className="absolute top-2 right-2 w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold"
+              style={{ background: 'rgba(0,0,0,0.55)', color: 'white' }}
+            >
+              ✕
+            </button>
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            className="w-full flex flex-col items-center justify-center gap-2 rounded-2xl transition-all"
+            style={{
+              height: '140px',
+              border: '2px dashed rgba(196,181,253,0.6)',
+              background: '#FAF7FF',
+              color: '#A78BFA',
+              cursor: 'pointer',
+            }}
+          >
+            <span style={{ fontSize: '32px' }}>📷</span>
+            <span className="text-sm font-semibold">사진 추가하기</span>
+            <span className="text-xs" style={{ color: '#C4B5FD' }}>JPG, PNG, WEBP · 최대 10MB</span>
+          </button>
+        )}
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          onChange={handleImageChange}
+          className="hidden"
+        />
+      </div>
+
       {/* 제목 */}
       <div>
         <label style={labelStyle}>제목 *</label>
@@ -174,7 +258,6 @@ export default function SellForm({ userId }: { userId: string }) {
         </p>
       </div>
 
-      {/* 에러 메시지 */}
       {error && (
         <p
           className="text-sm px-4 py-3 rounded-xl"
@@ -184,7 +267,6 @@ export default function SellForm({ userId }: { userId: string }) {
         </p>
       )}
 
-      {/* 제출 버튼 */}
       <button
         type="submit"
         disabled={loading}

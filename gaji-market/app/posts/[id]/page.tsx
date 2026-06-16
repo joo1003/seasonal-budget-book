@@ -4,6 +4,8 @@ import Header from '@/components/Header'
 import Link from 'next/link'
 import Image from 'next/image'
 import DeleteButton from './DeleteButton'
+import CommentSection from './CommentSection'
+import LikeButton from './LikeButton'
 
 const STATUS_LABEL: Record<string, { text: string; bg: string; color: string }> = {
   selling: { text: '판매중', bg: '#EDE9FE', color: '#6D28D9' },
@@ -44,6 +46,39 @@ export default async function PostDetailPage({
     .select('username, full_name, location')
     .eq('id', post.user_id)
     .single()
+
+  const { count: likeCount } = await supabase
+    .from('likes')
+    .select('*', { count: 'exact', head: true })
+    .eq('post_id', id)
+
+  const { data: myLike } = user
+    ? await supabase.from('likes').select('id').eq('post_id', id).eq('user_id', user.id).single()
+    : { data: null }
+
+  const { data: comments } = await supabase
+    .from('comments')
+    .select('id, content, created_at, updated_at, user_id, parent_id, profiles(username, full_name)')
+    .eq('post_id', id)
+    .order('created_at', { ascending: true })
+
+  const commentIds = (comments ?? []).map(c => c.id)
+  const { data: commentLikes } = commentIds.length > 0
+    ? await supabase.from('comment_likes').select('comment_id, user_id').in('comment_id', commentIds)
+    : { data: [] }
+
+  const clCount: Record<string, number> = {}
+  const clUserLiked = new Set<string>()
+  for (const l of commentLikes ?? []) {
+    clCount[l.comment_id] = (clCount[l.comment_id] ?? 0) + 1
+    if (l.user_id === user?.id) clUserLiked.add(l.comment_id)
+  }
+
+  const enrichedComments = (comments ?? []).map(c => ({
+    ...c,
+    like_count: clCount[c.id] ?? 0,
+    liked_by_me: clUserLiked.has(c.id),
+  }))
 
   const status = STATUS_LABEL[post.status] ?? STATUS_LABEL.selling
   const isOwner = user?.id === post.user_id
@@ -125,9 +160,17 @@ export default async function PostDetailPage({
               {post.price.toLocaleString()}원
             </p>
 
-            <p className="text-xs mb-6" style={{ color: '#C4B5FD' }}>
-              {timeAgo(post.created_at)}
-            </p>
+            <div className="flex items-center justify-between mb-6">
+              <p className="text-xs" style={{ color: '#C4B5FD' }}>
+                {timeAgo(post.created_at)}
+              </p>
+              <LikeButton
+                postId={post.id}
+                initialCount={likeCount ?? 0}
+                initialLiked={!!myLike}
+                currentUserId={user?.id ?? null}
+              />
+            </div>
 
             <div style={{ height: '1px', background: 'rgba(196,181,253,0.25)', marginBottom: '20px' }} />
 
@@ -205,6 +248,16 @@ export default async function PostDetailPage({
                 </button>
               )}
             </div>
+          </div>
+
+          {/* 댓글 섹션 */}
+          <div className="px-6 pb-6">
+            <CommentSection
+              postId={post.id}
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              initialComments={enrichedComments as any}
+              currentUserId={user?.id ?? null}
+            />
           </div>
         </div>
       </main>

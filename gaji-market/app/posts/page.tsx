@@ -25,26 +25,46 @@ export default async function PostsPage({
 
   const { data: posts } = await query
 
+  const postIds = (posts ?? []).map(p => p.id)
+
+  const [{ data: likes }, { data: comments }] = await Promise.all([
+    postIds.length > 0
+      ? supabase.from('likes').select('post_id').in('post_id', postIds)
+      : Promise.resolve({ data: [] }),
+    postIds.length > 0
+      ? supabase.from('comments').select('post_id').in('post_id', postIds)
+      : Promise.resolve({ data: [] }),
+  ])
+
+  const likeCount: Record<string, number> = {}
+  for (const l of likes ?? []) likeCount[l.post_id] = (likeCount[l.post_id] ?? 0) + 1
+
+  const commentCount: Record<string, number> = {}
+  for (const c of comments ?? []) commentCount[c.post_id] = (commentCount[c.post_id] ?? 0) + 1
+
+  const enrichedPosts = (posts ?? []).map(p => ({
+    ...p,
+    likeCount: likeCount[p.id] ?? 0,
+    commentCount: commentCount[p.id] ?? 0,
+  }))
+
   return (
     <div className="min-h-screen flex flex-col" style={{ background: '#F8F5FF' }}>
       <Header user={user} />
 
       <main className="flex-1 max-w-5xl mx-auto w-full px-4 py-8">
-        {/* 타이틀 */}
         <div className="flex items-center justify-between mb-6">
           <h1 className="text-2xl font-black" style={{ color: '#3B0764', letterSpacing: '-0.02em' }}>
             판매글 목록
           </h1>
           <span className="text-sm" style={{ color: '#A78BFA' }}>
-            총 {posts?.length ?? 0}개
+            총 {enrichedPosts.length}개
           </span>
         </div>
 
-        {/* 카테고리 필터 */}
         <CategoryFilter categories={CATEGORIES} selected={category ?? '전체'} />
 
-        {/* 판매글 목록 */}
-        {!posts || posts.length === 0 ? (
+        {enrichedPosts.length === 0 ? (
           <div
             className="mt-8 py-20 rounded-3xl text-center"
             style={{ background: 'white', border: '1px solid rgba(196,181,253,0.3)' }}
@@ -55,7 +75,7 @@ export default async function PostsPage({
           </div>
         ) : (
           <div className="mt-5 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-            {posts.map((post) => (
+            {enrichedPosts.map((post) => (
               <PostCard key={post.id} post={post} />
             ))}
           </div>

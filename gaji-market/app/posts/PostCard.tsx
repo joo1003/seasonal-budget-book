@@ -10,6 +10,8 @@ interface Post {
   created_at: string
   user_id: string
   image_url?: string | null
+  likeCount?: number
+  commentCount?: number
 }
 
 function timeAgo(dateStr: string) {
@@ -94,6 +96,22 @@ export default function PostCard({ post }: { post: Post }) {
           <p className="mt-1 text-xs" style={{ color: '#C4B5FD' }}>
             {post.category} · {timeAgo(post.created_at)}
           </p>
+
+          {/* 좋아요 + 댓글 수 */}
+          {(post.likeCount !== undefined || post.commentCount !== undefined) && (
+            <div className="flex items-center gap-3 mt-2 pt-2" style={{ borderTop: '1px solid rgba(196,181,253,0.2)' }}>
+              {post.likeCount !== undefined && (
+                <span className="text-xs flex items-center gap-1" style={{ color: '#A78BFA' }}>
+                  🤍 {post.likeCount}
+                </span>
+              )}
+              {post.commentCount !== undefined && (
+                <span className="text-xs flex items-center gap-1" style={{ color: '#A78BFA' }}>
+                  💬 {post.commentCount}
+                </span>
+              )}
+            </div>
+          )}
         </div>
       </div>
     </Link>
